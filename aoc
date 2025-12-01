@@ -1,5 +1,5 @@
 #!/bin/bash
 
-echo Advent of Code runner ~ kixikCodes
+echo "Advent of Code runner ~ kixikCodes"
 echo
 dotnet run --no-restore -- "$@"

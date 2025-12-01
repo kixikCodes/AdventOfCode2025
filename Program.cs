@@ -25,9 +25,11 @@ class Program {
             return;
         }
         try {
-            runMethod.Invoke(null, null);
-        }
-        catch (Exception e) {
+            string day = dayToRun.ToString("D2");
+            string inputPath = $"inputs/day{day}.txt";
+            string testPath = $"tests/Day{day}.txt";
+            runMethod.Invoke(null, [inputPath, testPath]);
+        } catch (Exception e) {
             Console.WriteLine($"Error running day {dayToRun}:");
             Console.WriteLine(e.InnerException?.Message ?? e.Message);
         }
