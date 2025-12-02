@@ -30,6 +30,5 @@ Thumbs.db
 # Solution file not scrictly required
 *.sln
 
-# Inputs and Tests
-/input
-/tests
+# Inputs
+/inputs
