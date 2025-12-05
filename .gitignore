@@ -31,4 +31,4 @@ Thumbs.db
 *.sln
 
 # Inputs
-/inputs/*
+/inputs/*.txt
