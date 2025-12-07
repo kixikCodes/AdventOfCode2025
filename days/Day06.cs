@@ -10,8 +10,20 @@ public class Day06 {
         List<string> lines = test
             ? [.. File.ReadAllLines(testPath)]
             : [.. File.ReadAllLines(inputPath)];
+        // This is a parsing-focused day, thus all of the parsing will be in
+        // the parts themselves with one common solver after.
+
+        // Part 1
+        Part1(lines);
+
+        // Part 2
+        Part2(lines);
+    }
+
+    private static void Part1(List<string> lines) {
         List<long[]> operands = [];
         List<char> operators = [];
+
         var valueGrid = lines.SkipLast(1)
             .Select(line =>
             line.Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -21,29 +33,8 @@ public class Day06 {
         operands = [.. Enumerable.Range(0, valueGrid[0].Length)
                 .Select(col => valueGrid.Select(row => row[col]).ToArray())];
         operators = [.. lines[^1].Where(c => c is '+' or '*')];
-
-        // Part 1
-        Part1(operands, operators);
-
-        // Part 2
-        Part2(lines);
-    }
-
-    private static void Part1(List<long[]> operands, List<char> operators) {
-        long result = 0;
-        for (int i = 0; i < operands.Count; i++) {
-            long[] values = operands[i];
-            char op = operators[i];
-
-            long accumulator = operands[i][0];
-            for (int j = 1; j < values.Length; j++) {
-                accumulator = (op == '+')
-                    ? accumulator += values[j]
-                    : accumulator *= values[j]; // Only other operator is '*'.
-            }
-            result += accumulator;
-        }
-        Console.WriteLine(result);
+        
+        Console.WriteLine(SolveWorksheet(operands, operators));
     }
 
     private static void Part2(List<string> lines) {
@@ -93,6 +84,23 @@ public class Day06 {
             operands.Add([.. values]);
         }
 
-        Part1(operands, operators); // lmfao
+        Console.WriteLine(SolveWorksheet(operands, operators));
+    }
+
+    static long SolveWorksheet(List<long[]> operands, List<char> operators) {
+        long result = 0;
+        for (int i = 0; i < operands.Count; i++) {
+            long[] values = operands[i];
+            char op = operators[i];
+
+            long accumulator = operands[i][0];
+            for (int j = 1; j < values.Length; j++) {
+                accumulator = (op == '+')
+                    ? accumulator += values[j]
+                    : accumulator *= values[j];
+            }
+            result += accumulator;
+        }
+        return result;
     }
 }
