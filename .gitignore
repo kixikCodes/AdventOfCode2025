@@ -32,3 +32,6 @@ Thumbs.db
 
 # Inputs
 /inputs/*.txt
+
+# Notes
+.excalidraw
