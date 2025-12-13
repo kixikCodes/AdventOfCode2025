@@ -17,7 +17,7 @@ public class Day11 {
         // Part 1
         Part1(nodes);
 
-        // Part 2 (again, unviable bcs they made the path count ridiculous)
+        // Part 2 (Thanks to @HyperNeutrino)
         Part2(nodes);
     }
 
@@ -36,19 +36,26 @@ public class Day11 {
     }
 
     private static void Part2(Dictionary<string, List<string>> nodes) {
-        int result;
-        void DFS(string node, bool seendac, bool see) {
-            currentPath.Add(node);
-            if (node == "out")
-                paths.Add([.. currentPath]);
-            else if (nodes.TryGetValue(node, out List<string>? nextNodes)) {
+        Dictionary<(string start, string end), long> memo = [];
+
+        long DFS(string start, string end) {
+            if (memo.TryGetValue((start, end), out var value))
+                return value;
+            long pathCount = 0;
+            if (start == end)
+                pathCount = 1;
+            else if (!nodes.TryGetValue(start, out var nextNodes))
+                pathCount = 0;
+            else {
+                long sum = 0;
                 foreach (var next in nextNodes)
-                    DFS(next, currentPath);
+                    sum += DFS(next, end);
+                pathCount = sum;
             }
-            currentPath.RemoveAt(currentPath.Count - 1);
+            memo[(start, end)] = pathCount;
+            return pathCount;
         }
-        DFS("svr", []);
-        result = paths.Count(path => path.Contains("dac") && path.Contains("fft"));
-        Console.WriteLine(result);
+        Console.WriteLine(DFS("svr", "dac") * DFS("dac", "fft") * DFS("fft", "out")
+                        + DFS("svr", "fft") * DFS("fft", "dac") * DFS("dac", "out"));
     }
 }
