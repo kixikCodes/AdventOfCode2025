@@ -1,6 +1,9 @@
 namespace AdventOfCode2025.days;
 
 using System;
+using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
 
 public class Day10 {
     record Machine(List<bool> IndicatorLights, List<List<int>> Buttons, List<int> JoltageRequirements);
@@ -31,7 +34,7 @@ public class Day10 {
         // Part 1
         Part1(machineManuals);
 
-        // Part 2 (correct but unviable, BFS is too slow for input)
+        // Part 2 (Multithreaded Brute-Force BFS)
         Part2(machineManuals);
     }
 
@@ -72,53 +75,77 @@ public class Day10 {
 
     private static void Part2(List<Machine> machineManuals) {
         int result = 0;
-        foreach (Machine manual in machineManuals) {
-            int joltagesCount = manual.JoltageRequirements.Count;
-            int buttonCount = manual.Buttons.Count;
-            int[] target = [.. manual.JoltageRequirements];
-            int[] init = new int[joltagesCount];
-            int[][] buttonIndexes = new int[buttonCount][];
-            for (int i = 0; i < buttonCount; i++)
-                buttonIndexes[i] = [.. manual.Buttons[i]];
-            Queue<(int[] state, int steps)> q = new();
-            q.Enqueue((init, 0));
-            HashSet<string> visited = [];
-            static string Key(int[] arr) => string.Join(',', arr);
-            visited.Add(Key(init));
-            while (q.Count > 0) {
-                var (state, presses) = q.Dequeue();
-                bool finished = true;
-                for (int i = 0; i < joltagesCount; i++) {
-                    if (state[i] != target[i]) {
-                        finished = false;
+        int completed = 0;
+        var sw = Stopwatch.StartNew();
+
+        Parallel.ForEach(machineManuals, manual => {
+            int local = SolveMachine(manual);
+            Interlocked.Add(ref result, local);
+
+            int done = Interlocked.Increment(ref completed);
+            Console.WriteLine(
+                $"{done}/{machineManuals.Count} " +
+                $"({100.0 * done / machineManuals.Count:F1}%) " +
+                $"elapsed {sw.Elapsed.Seconds}"
+            );
+        });
+        Console.WriteLine(result);
+    }
+
+    // -- Part 2 Methods --
+    private static ulong Pack(int[] state) {
+        ulong key = 0;
+        int shift = 0;
+        for (int i = 0; i < state.Length; i++) {
+            key |= (ulong)state[i] << shift;
+            shift += 6;
+        }
+        return key;
+    }
+
+    private static int SolveMachine(Machine manual) {
+        int joltagesCount = manual.JoltageRequirements.Count;
+        int buttonCount = manual.Buttons.Count;
+        int[] target = [.. manual.JoltageRequirements];
+        int[] init = new int[joltagesCount];
+        int[][] buttonIndexes = new int[buttonCount][];
+        for (int i = 0; i < buttonCount; i++)
+            buttonIndexes[i] = [.. manual.Buttons[i]];
+
+        Queue<(int[] state, int steps)> q = new();
+        q.Enqueue((init, 0));
+        HashSet<ulong> visited = [];
+        visited.Add(Pack(init));
+        while (q.Count > 0) {
+            var (state, presses) = q.Dequeue();
+            bool finished = true;
+            for (int i = 0; i < joltagesCount; i++) {
+                if (state[i] != target[i]) {
+                    finished = false;
+                    break;
+                }
+            }
+            if (finished)
+                return presses;
+            for (int i = 0; i < buttonCount; i++) {
+                int[] next = (int[])state.Clone();
+                foreach (int index in buttonIndexes[i])
+                    next[index]++;
+                bool valid = true;
+                for (int j = 0; j < joltagesCount; j++) {
+                    if (next[j] > target[j]) {
+                        valid = false;
                         break;
                     }
                 }
-                if (finished) {
-                    result += presses;
-                    break;
-                }
-                for (int i = 0; i < buttonCount; i++) {
-                    int[] next = (int[])state.Clone();
-                    foreach (int index in buttonIndexes[i])
-                        next[index]++;
-                    bool valid = true;
-                    for (int j = 0; j < joltagesCount; j++) {
-                        if (next[j] > target[j]) {
-                            valid = false;
-                            break;
-                        }
-                    }
-                    if (!valid)
-                        continue;
-                    string key = Key(next);
-                    if (!visited.Add(key))
-                        continue;
-                    q.Enqueue((next, presses + 1));
-                }
+                if (!valid)
+                    continue;
+                if (!visited.Add(Pack(next)))
+                    continue;
+                q.Enqueue((next, presses + 1));
             }
         }
-        Console.WriteLine(result);
+        return 0;
     }
 
     private static void Debug(List<Machine> machineManuals) {
