@@ -1,13 +1,10 @@
 namespace AdventOfCode2025.days;
 
 using System;
-using System.Diagnostics;
-using System.Threading;
-using System.Threading.Tasks;
+
+record Machine(List<bool> IndicatorLights, List<List<int>> Buttons, List<int> JoltageRequirements);
 
 public class Day10 {
-    record Machine(List<bool> IndicatorLights, List<List<int>> Buttons, List<int> JoltageRequirements);
-
     public static void RunDay(string inputPath, string testPath, bool test) {
         // Parsing
         List<string> lines = test
@@ -29,12 +26,12 @@ public class Day10 {
             }
             machineManuals.Add(new(indicatorLights, buttons, joltageRequirements));
         }
-        //Debug(machineManuals);
         
-        // Part 1
+        // Part 1 (BFS with Bit Packing)
         Part1(machineManuals);
 
-        // Part 2 (Multithreaded Brute-Force BFS)
+        // Part 2 (Algebraic Solution with Gaussian Elimination and DFS)
+        // Thanks to @HyperNeutrino and @icub3d for explanation. This was excessive for AoC, in my opinion.
         Part2(machineManuals);
     }
 
@@ -75,92 +72,103 @@ public class Day10 {
 
     private static void Part2(List<Machine> machineManuals) {
         int result = 0;
-        int completed = 0;
-        var sw = Stopwatch.StartNew();
 
-        Parallel.ForEach(machineManuals, manual => {
-            int local = SolveMachine(manual);
-            Interlocked.Add(ref result, local);
+        foreach (Machine m in machineManuals) {
+            Matrix matrix = new(m);
+            int max = m.JoltageRequirements.Max() + 1;
+            int best = int.MaxValue;
+            int[] free = new int[matrix.Independents.Count];
 
-            int done = Interlocked.Increment(ref completed);
-            Console.WriteLine(
-                $"{done}/{machineManuals.Count} " +
-                $"({100.0 * done / machineManuals.Count:F1}%) " +
-                $"elapsed {sw.Elapsed.Seconds}"
-            );
-        });
+            static void DFS(Matrix m, int idx, int[] free, ref int best, int max) {
+                if (idx == free.Length) {
+                    var v = m.Check(free);
+                    if (v.HasValue) best = Math.Min(best, v.Value);
+                    return;
+                }
+                int partial = free.Take(idx).Sum();
+                for (int i = 0; i < max && partial + i < best; i++) {
+                    free[idx] = i;
+                    DFS(m, idx + 1, free, ref best, max);
+                }
+            }
+
+            DFS(matrix, 0, free, ref best, max);
+            result += best;
+        }
         Console.WriteLine(result);
     }
+}
 
-    // -- Part 2 Methods --
-    private static ulong Pack(int[] state) {
-        ulong key = 0;
-        int shift = 0;
-        for (int i = 0; i < state.Length; i++) {
-            key |= (ulong)state[i] << shift;
-            shift += 6;
-        }
-        return key;
+// Part 2 Exclusive Utility Class
+class Matrix {
+    public double[,] Data;
+    public int Rows, Cols;
+    public List<int> Dependents = [];
+    public List<int> Independents = [];
+    public const double Epsilon = 1e-9;
+
+    public Matrix(Machine m) {
+        Rows = m.JoltageRequirements.Count;
+        Cols = m.Buttons.Count;
+        Data = new double[Rows, Cols + 1];
+        for (int c = 0; c < Cols; c++)
+            foreach (int r in m.Buttons[c])
+                Data[r, c] = 1;
+        for (int r = 0; r < Rows; r++)
+            Data[r, Cols] = m.JoltageRequirements[r];
+        GaussianElimination();
     }
 
-    private static int SolveMachine(Machine manual) {
-        int joltagesCount = manual.JoltageRequirements.Count;
-        int buttonCount = manual.Buttons.Count;
-        int[] target = [.. manual.JoltageRequirements];
-        int[] init = new int[joltagesCount];
-        int[][] buttonIndexes = new int[buttonCount][];
-        for (int i = 0; i < buttonCount; i++)
-            buttonIndexes[i] = [.. manual.Buttons[i]];
+    private void GaussianElimination() {
+        int pivot = 0;
 
-        Queue<(int[] state, int steps)> q = new();
-        q.Enqueue((init, 0));
-        HashSet<ulong> visited = [];
-        visited.Add(Pack(init));
-        while (q.Count > 0) {
-            var (state, presses) = q.Dequeue();
-            bool finished = true;
-            for (int i = 0; i < joltagesCount; i++) {
-                if (state[i] != target[i]) {
-                    finished = false;
-                    break;
+        for (int col = 0; col < Cols && pivot < Rows; col++) {
+            int best = pivot;
+            double bestVal = Math.Abs(Data[pivot, col]);
+            for (int r = pivot + 1; r < Rows; r++) {
+                double v = Math.Abs(Data[r, col]);
+                if (v > bestVal) {
+                    bestVal = v;
+                    best = r;
                 }
             }
-            if (finished)
-                return presses;
-            for (int i = 0; i < buttonCount; i++) {
-                int[] next = (int[])state.Clone();
-                foreach (int index in buttonIndexes[i])
-                    next[index]++;
-                bool valid = true;
-                for (int j = 0; j < joltagesCount; j++) {
-                    if (next[j] > target[j]) {
-                        valid = false;
-                        break;
-                    }
-                }
-                if (!valid)
-                    continue;
-                if (!visited.Add(Pack(next)))
-                    continue;
-                q.Enqueue((next, presses + 1));
+            if (bestVal < Epsilon) {
+                Independents.Add(col);
+                continue;
             }
+            for (int c = col; c <= Cols; c++)
+                (Data[pivot, c], Data[best, c]) = (Data[best, c], Data[pivot, c]);
+            Dependents.Add(col);
+            double div = Data[pivot, col];
+            for (int c = col; c <= Cols; c++)
+                Data[pivot, c] /= div;
+            for (int r = 0; r < Rows; r++) {
+                if (r == pivot) continue;
+                double factor = Data[r, col];
+                if (Math.Abs(factor) > Epsilon)
+                    for (int c = col; c <= Cols; c++)
+                        Data[r, c] -= factor * Data[pivot, c];
+            }
+            pivot++;
         }
-        return 0;
+        for (int c = Dependents.Count + Independents.Count; c < Cols; c++)
+            Independents.Add(c);
     }
 
-    private static void Debug(List<Machine> machineManuals) {
-        foreach (Machine manual in machineManuals) {
-            Console.Write("[");
-            Console.Write(string.Join(' ', manual.IndicatorLights));
-            Console.Write("] ");
-            foreach (List<int> button in manual.Buttons) {
-                Console.Write("(");
-                Console.Write(string.Join(' ', button));
-                Console.Write(") ");
-            }
-            Console.Write("{");
-            Console.Write(string.Join(' ', manual.JoltageRequirements));
-            Console.WriteLine("}");
+    public int? Check(int[] free) {
+        int total = free.Sum();
+
+        for (int r = 0; r < Dependents.Count; r++) {
+            double v = Data[r, Cols];
+            for (int i = 0; i < Independents.Count; i++)
+                v -= Data[r, Independents[i]] * free[i];
+            if (v < -Epsilon)
+                return null;
+            double round = Math.Round(v);
+            if (Math.Abs(v - round) > Epsilon)
+                return null;
+            total += (int)round;
         }
+        return total;
     }
 }
